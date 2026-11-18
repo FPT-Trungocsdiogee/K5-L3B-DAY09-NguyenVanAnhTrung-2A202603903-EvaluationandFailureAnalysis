@@ -54,7 +54,7 @@ def check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> tu
     problems = integrity_check(pr, base, spec, base_spec)
     if problems:
         return ["integrity"], [f"  INTEGRITY {p}" for p in problems]
-    blocked, lines = [], []
+    blocked, warned, lines = [], [], []
     bs = spec.get("bootstrap", {})
     for m in spec["metrics"]:
         mid, th, val = m["id"], m.get("threshold", {}), pr["metrics"].get(m["id"])
@@ -76,14 +76,17 @@ def check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> tu
             note = f"Δ {d:+.3f} CI [{lo:+.3f}, {hi:+.3f}]"
             if hi < 0:
                 verdict = "fail"
-        if verdict != "ok" and m.get("blocking"):
-            blocked.append(mid)
+        if verdict != "ok":
+            # a non-blocking failure (or missing value) must still show up in the report summary
+            (blocked if m.get("blocking") else warned).append(mid)
         label = {"ok": "ok", "missing": "MISSING"}.get(verdict, "BLOCK" if m.get("blocking") else "warn")
         lines.append(f"  {mid:<22} {val!s:<8} {json.dumps(th):<40} {note:<28} {label}")
     if spec.get("slices"):
         sb, sl = slice_check(pr, base, spec)
         blocked += sb
         lines += sl
+    if warned:
+        lines.append(f"  {len(warned)} warning(s), non-blocking: {', '.join(warned)}")
     return blocked, lines
 
 
